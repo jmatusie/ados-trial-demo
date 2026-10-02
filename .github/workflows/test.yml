@@ -1,0 +1,23 @@
+# Reports test results on every push and pull request.
+#
+# This reports, it does not gate. On GitHub Free a private repository cannot
+# enforce a ruleset, so a required status check here would be configurable and
+# inert. The gate is the owner reading the report at the end of each session.
+name: test
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm test

@@ -1,0 +1,21 @@
+{
+  "name": "xv2-parser",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Turns network device configuration and command output into normalized, provenance-carrying records.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "tsc --noEmit && vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

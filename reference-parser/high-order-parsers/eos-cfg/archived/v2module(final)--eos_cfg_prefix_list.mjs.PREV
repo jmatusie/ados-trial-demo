@@ -1,0 +1,197 @@
+/**
+ * @todo:
+ * 
+ * Parser needs to be able to handle input such as this:
+ * 
+ * 	ip prefix-list CONNECTED-TO-BGP-TRANSIT seq 10 permit 169.254.0.0/19 le 31
+ * 	ip prefix-list CONNECTED-TO-BGP-TRANSIT seq 20 permit 169.254.64.0/19 le 31
+ * 	ip prefix-list CONNECTED-TO-BGP-TRANSIT seq 30 permit 169.254.160.0/19 le 31
+ * 
+ */
+
+import {
+	// from Parser_Result_helpers.mjs
+	flattenArray,
+	joinWith,
+	mapArray,
+	multiplyBy,
+	addTag,
+	flattenItemWith,
+	flattenItemRecursively,
+	flattenItemRecursivelyWith,
+	pipe,
+	asString,
+	groupByPropName,
+
+	// from Parser_Core.mjs
+	seqOf,
+	sequenceOf,
+	regex,
+	oneOf,
+	many,
+	possibly,
+	lookAhead,
+	setOf,
+	succeedWith,
+	everythingUntil,
+	except,
+	strng,
+	many1,
+
+	// from Parser_Text.mjs
+	parseLine,
+	digits,
+	rol,
+	hword,
+	at_eol,
+	word,
+	eol,
+	_,			// 0 or more consequtive inline whitespace (spaces & tabs)
+	__,			// 0 or more consequetive whitespace (spaces, tabs, newlines, carriage returns)
+
+	// from Parser_Network.mjs
+	ipAddress,
+	ipUC,
+	ipMC,
+	ipNetwork,
+	ipNetwork_asObject,
+	interfaceName,
+	gotoSection,
+	parseSection,
+	hostnameFromConfig,
+	endOfIndentLevel,
+	gotoStr,
+	until,
+	goto,
+} from '../parser_modules.mjs'
+
+
+/*********************************************************************************
+ * Module:      eos_cfg_prefix_list
+ * Version:     3.0
+ * Parameters:  deviceName: string
+ * Description: Parses a single arista configuration file for prefix-lists
+ * Caveats:  ?
+ * Output:      Table of route-map entries per switch
+ *   {
+ *     "pfxName": name of the prefix-list,
+ *     "seqNo":   sequence number,
+ *     "action":  permit or deny
+ *     "prefix":  ip address
+ *     "range":   tagged CSV output of all modifiers on the "le:32,gt:24"
+ *   }
+ */
+const eos_cfg_prefix_list = (deviceName) => {
+
+	/** SECTION 1: module metadata ****/
+	const pmodule = {
+		name: 'eos_cfg_prefix_list',	// used for module identification when using logging in this module (i.e. logResult(`[${pmodule.name}]: blah blah blah`)
+		ver: 1.0,									    // future capability
+		usage: '',								    // future capability to provide help (may not be used)
+		desc: ``,
+		returnSchema: null,
+	}
+
+
+	/** SECTION 2: local result helpers to make code more readable (arguably).  ****
+ *  These are candidates for possibly moving into an external module 
+ */
+	const _0 = (arr) => arr[0]		// these get values out of arrays at the supplied index
+	const _1 = (arr) => arr[1]
+	const _2 = (arr) => arr[2]
+	const _3 = (arr) => arr[3]
+	const isTrue = (res) => true  // tags the existence of a result as 'true' - for flags (i.e. if xyz is parsed, xyz is true)
+
+
+	//	intra-line parsers...
+	const prefixListName = hword
+	const pfxAction = oneOf('permit', 'deny')
+	const pfxSeqNo = digits
+
+	const entryDetail = seqOf(oneOf(
+		seqOf('le', digits).map(joinWith(':')),
+		seqOf('lt', digits).map(joinWith(':')),
+		seqOf('gt', digits).map(joinWith(':')),
+		seqOf('ge', digits).map(joinWith(':')),
+	))
+	const entryDetails = many(entryDetail).map(joinWith(','))
+
+
+	// line-level parsers...
+	const prefixListHeader= parseLine('ip prefix-list', prefixListName).map((result)=>result[1]) 
+	const validPrefixListEntry =	parseLine( 
+		'seq', 
+		pfxSeqNo.tag('seqNo'), 
+		pfxAction.tag('action'), 
+		ipNetwork.tag('prefix'), 
+		possibly(entryDetails).map(asString).tag('range'),
+	)
+
+	const unknown				  = parseLine(rol).map((result)=>result[0]).named('unknown')
+
+	const prefixListEntry = oneOf(
+		validPrefixListEntry,
+		unknown.logResult( (res) => `[module:${pmodule.name}, parser:prefixListEntry]: unrecognized or invalid text: '${res}'`)
+	)
+
+	// record-level parser
+	const parsePrefixList = seqOf(
+		prefixListHeader.tag('pfxName'),
+		many(prefixListEntry).tagList('pfxEntries'),
+	).getTaggedR()
+		.map(multiplyBy('pfxEntries'))
+
+
+	// account for Arista section delimiter (newline + !)...
+	const prefixListRecord = parseSection(parsePrefixList).logEnv( ({
+		section_index_start,
+		section_index_parseduntil, 
+		section_index_termination,
+		section_text_unparsed,
+		section_parser_dataLog,
+		// section_text,          // unused here, but available if needed
+		// section_text_parsed,   // unused here, but available if needed
+	}) => ([
+		// if the section parser has logs, make sure we pull them from the environment, but return empty if not
+		(section_parser_dataLog?.length > 0) ? [
+			`[prefixListRecord]: the parser function '[parsePrefixList]' generated the following logs (note that indices below are relative to the parent index ${section_index_start}:`,
+			section_parser_dataLog.map( (entry) => `  ${entry}` ),
+		] : [],
+		// if the section parser skips text for any reason, report it...
+		(section_text_unparsed?.length > 0) ? [
+			`[prefixListRecord]: the parser function '[parsePrefixList]' did not parse entire section, starting from index ${section_index_termination}, and stopping at ${section_index_parseduntil}.  Skipped text is below:`,
+			`  '${section_text_unparsed}'`,
+		] : [],
+	]))
+
+
+	/*** Output formatting functions for the results... */
+
+	const pfxEntry_toStr = ({ pfxName, seqNo, action, prefix, range}) => 
+		`${seqNo}:${action}:${prefix}${ (range) ? `(${range})` : ''}` 
+
+	const pfxsToStrings = (delimiter) => (prefixLists) => pipe(
+		groupByPropName('pfxName'),							// now we have an object, with each key bring its own prefixList
+		(groupObj) => Object.entries(groupObj)	// now we have an array, each containing [ pfxName, pfxEntries ]
+			.map( ([pfxName,pfxEntries]) => `${pfxName}${delimiter}${pfxEntries.map(pfxEntry_toStr).join(delimiter)}` ),
+	) (prefixLists)
+
+	
+
+
+	/*** Main function */
+
+	return seqOf(
+		gotoSection( 'ip prefix-list'),
+		many(prefixListRecord)
+	).map((res)=>res[1])
+		.map(flattenArray)
+		.dataLog_toResult()			// <<-- this changes the return format to { result, dataLog } instead of a result
+}
+
+
+// run for in-browser IDE
+// eos_cfg_prefix_list('sampledevicename')
+
+// uncomment for production
+export { eos_cfg_prefix_list }

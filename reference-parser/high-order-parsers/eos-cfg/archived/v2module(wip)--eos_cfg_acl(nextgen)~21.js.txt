@@ -1,0 +1,367 @@
+/**  WHERE I"M AT:
+ * 
+ * Starting with eos_cfg_std_acl as a base (and inheriting it's problems), this parser adds a parser for extended ACLs
+ * 
+ * I tried doing th is wihtout referencing prior implementation, but may notbe work the time.
+ * 
+ * Consider updating prior ext_acl and cleaning it out a bit.  
+ */
+
+
+/*
+arista_cfg_extACL_per_entry = ( () => {
+	///	generalized acl entry "parts" - all possible components within a single ACL entry
+	const aclSeqNo = digits
+	const aclName = hword
+	const portName = hword
+	
+	const aclNet = oneOf(
+		seqOf( 'host', ipAddress ) .map(result => result[1]+'/32'),
+		ipNetwork,
+		'any',
+	)
+	
+	// parse possible info at the end of an ACL line.  there could be more suffixes not accounted for...
+	const aclSuffix = oneOf('log','tracked',)		
+	const aclSuffixes =	many(aclSuffix).map(joinWith(' || '))
+	
+	// protocols listed after 'permit' or 'deny' statement, there are probably more not accountd for
+	const extAclProtocol = oneOf(	'ip',	'tcp', 'udp',	'icmp',	'igmp',	'pim',	'ospf',	'vrrp',	'ahp', )
+
+	// parses a single port detail (so far only "ttl eq" is accounted for)
+	const extAclPortDetail = oneOf(
+		seqOf('ttl eq', digits).map(result=>`(ttl=${result[1]})`),
+	)
+	// parses single port, each of which has (optional) details
+	const extAclPort = seqOf(
+		not(aclSuffix),					// this 'not' is important, because 'portName' below is a wildcard (hword) and can match everything
+		portName,
+		many(extAclPortDetail).map(joinWith(',')),
+	).map(joinWith(''))
+	
+	// parses a list of ports on 
+	const extAclDstPorts = possibly(
+		seqOf( 'eq', 	many1(extAclPort)	).map(result=>result[1]) 
+	).map(nullToArray)
+	.map(joinWith(',')).map(str=>`"${str}"`)
+	
+	const extAclDst = seqOf(
+		aclNet					.tagAs('dstNet'), 
+		extAclDstPorts	.tagAs('dstPorts'),
+		aclSuffixes			.tagAs('aclSuffix'),
+	).map(getTagged)
+
+	const extAclSrcPorts = until(extAclDst, 
+		possibly(
+			seqOf( 'eq', many1(extAclPort) ).map(result=>result[1])
+		).map(nullToArray)				// mapping nullToArray due to array inside a 'possibly' parser
+	)
+	.map(joinWith(',')).map(str=>`"${str}"`)
+
+	const extAclSrc = seqOf(
+		aclNet					.tagAs('srcNet'),  
+		extAclSrcPorts	.tagAs('srcPorts'), 
+	).map(getTagged)
+
+	const extAclRemark 		= parseLine( aclSeqNo, 'remark', restOfLine).map( ([seqNo, entryType, remark]) => ({seqNo, entryType, remark}) ) 
+
+	const extAclLineItem 	= parseLine( 
+		aclSeqNo														.tagAs('seqNo'), 
+		oneOf('permit','deny')							.tagAs('entryType'),
+		extAclProtocol											.tagAs('proto'),
+		extAclSrc														.tagAs('src'),
+		extAclDst														.tagAs('dst'),
+		many(aclSuffix).map(joinWith(','))	.tagAs('aclSuffixes')
+	).map( pipe(
+		getTagged,
+		flattenItem 
+	))
+
+	const extAclLine = oneOf(
+		extAclLineItem, 
+		extAclRemark,
+	)
+		
+	const extACL = seqOf(
+		skipTo(seqOf('ip access-list', not('standard'))),
+		parseLine('ip access-list', aclName ).map(result=>result[1])		.tagAs('aclName'),
+		everythingUntil(extAclLine),
+		many(extAclLine)																								.tagAs('extAclEntries')
+	).map(getTagged)
+	.map( multiplyBy('extAclEntries') )
+	
+	const aclDelimiter = str('!\n')
+	const aclSection = subParseTo(aclDelimiter)			// subParseTo is a curried function
+	const acl = aclSection(extACL)
+	const acls = many(acl).map(flattenArray)
+	
+	return seqOf(
+		skipTo(seqOf('ip access-list', not('standard'))),
+		acls,
+	).map(item=>item[1])
+	.map(normalizedDataSet)
+}) ()
+// end of module arista_cfg_nat_dynamic
+
+
+// helper functions for this script...
+const extractCustName_fromMcAcl = aclName => aclName.match(/(FILTER-\w\w-|FILTER-)([A-Z]+)-*(.*)(-A|-B|-MULTICAST)/)?.[2] ?? ''
+const extractCustDesc_fromMcAcl = aclName => aclName.match(/(FILTER-\w\w-|FILTER-)([A-Z]+)-*(.*)(-A|-B|-MULTICAST)/)?.[3] ?? ''
+const dropInterfaceColumns = ({switchPortMode,	portChannel,	allowedVlans,	vrrpAddr, shutdown, nativeVlan, ipPimSparseMode,  ...rest}) => rest
+
+const fastHostname = seqOf(
+	gotoLine('hostname'),
+	'hostname',
+	hword,
+).map(result=>result[2])				
+// end of module arista_cfg_extACL_per_entry
+
+
+
+*/
+
+
+/**	Comment out this import and export at bottom when using in browser sandbox		 */
+/*
+import {
+	// from Parser_Result_helpers.mjs
+	flattenArray,
+	joinWith,
+	mapArray,
+	multiplyBy,
+	addTag,
+	flattenItem,
+	flattenItemWith,
+	flattenItemRecursively,
+	flattenItemRecursivelyWith,
+	groupByPropName,
+	normalizedDataSet,
+	nullToStr,
+	pipe,
+
+	// from Parser_Core.mjs
+	seqOf,
+	sequenceOf,
+	regex,
+	oneOf,
+	many,
+	possibly,
+	lookAhead,
+	setOf,
+	succeedWith,
+	everythingUntil,
+	except,
+	strng,
+	many1,
+	tok,
+	maybe,
+
+	// from Parser_Text.mjs
+	parseLine,
+	digits,
+	rol,
+	hword,
+	at_eol,
+	eol,
+
+	// from Parser_Network.mjs
+	ipAddress,
+	ipUC,
+	ipMC,
+	ipNetwork,
+	ipNetwork_asObject,
+	ipNetworkOrAddress,
+	gotoSection,
+	parseSection,
+	hostnameFromConfig,
+	endOfIndentLevel,
+	gotoStr,
+	until,
+	goto,
+} from '../parser_modules.mjs'
+*/
+
+/*********************************************************************************
+ * Module:			eos_cfg_acl
+ * Version:		 3.0
+ * Parameters:	deviceName: string
+ * Description: Parses a single arista configuration file acls.	Does not flatten into per-entry (yet)
+ * Caveats:	?
+ * Output:			List of acl objects
+ *	 {
+ *		 "aclName": name of the access-list,
+ *		 "type":		'standard', 'extended',
+ *		 "seqNo":	string representing sequence number,
+ *		 "action":	'permit', 'deny', 'remark'
+ *		 "value":	ip network if 'action' is 'permit' or 'deny', or comment if 'remark'
+ *	 }
+ */
+const eos_cfg_acl = (deviceName) => {
+	/** SECTION 1: module metadata ****/
+	const pmodule = {
+		name: 'eos_cfg_acl',	 // used for module identification when using logging in this module (i.e. logResult(`[${pmodule.name}]: blah blah blah`)
+		ver: 1.0,									// future capability
+		usage: '',								// future capability to provide help (may not be used)
+		desc: ``,
+		returnSchema: null,
+	}
+
+
+	/** SECTION 2: local result helpers to make code more readable (arguably).	****
+	 *	These are candidates for possibly moving into an external module 
+	 */
+	const _0 = (arr) => arr[0]		// these get values out of arrays at the supplied index
+	const _1 = (arr) => arr[1]
+	const _2 = (arr) => arr[2]
+	const _3 = (arr) => arr[3]
+	const isTrue = (res) => true	// tags the existence of a result as 'true' - for flags (i.e. if xyz is parsed, xyz is true)
+
+
+	//	intra-line parsers...
+	const eosName = regex(/^[a-zA-Z0-9_-]+/)	 // generic alphanumeric (plus underscores and dashes) used for vrfNames, routeMap names, aclNames, etc
+	const aclName = eosName.named('routeMapName')
+	const aclSeqNo = digits.named('aclSeqNo')
+
+
+	// line-level parsers...
+	const stdAcl_header	= parseLine('ip access-list standard', aclName).map((result)=>result[1]).named('stdAclHeader')
+	const stdAclEntry_permit	=	parseLine( aclSeqNo.tag('seqNo'), 'permit', possibly(strng('host')), ipNetworkOrAddress.tag('prefix') ).named('stdAclPermit')
+	const stdAclEntry_deny		=	parseLine( aclSeqNo.tag('seqNo'), 'deny', possibly(strng('host')), ipNetworkOrAddress.tag('prefix') ).named('stdAclDeny')
+
+
+	const extAcl_header	= parseLine('ip access-list', aclName, at_eol).map((result)=>result[1]).named('extAclHeader')
+
+	// ip, tcp, ospf, etc 
+	const extAcl_proto = word
+
+	const extAcl_net = oneOf(
+		strng('any'),
+		seqOf(strng('host'), ipAddress),
+		ipNetworkOrAddress,
+	)
+	
+	const extAcl_ports_src = seqOf(
+		strng('eq'),
+		except(extAcl_net, many(extAcl_proto).map( (protos)=>protos.join('|') )),
+	)
+
+	const extAcl_ports_dst = seqOf(
+		strng('eq'),
+		many(extAcl_proto)	.map( (protos)=>protos.join('|')),
+	)
+
+	const restOf_extAcl	=	seqOf( 
+		extAcl_proto.tag('proto'), 
+		extAcl_net.tag('srcNet'),
+		extAcl_ports_src.tag('srcPorts'),
+		extAcl_net.tag('dstNet'),
+		extAcl_ports_dst.tag('dstPorts'),
+	)
+
+	const statistic_perEntry = parseLine('statistics per-entry')
+	const extAcl_deny		=	parseLine( aclSeqNo.tag('seqNo'), 'deny', restOf_extAcl.tag('denied') )
+	//const extAcl_permit	=	parseLine( aclSeqNo.debugIf(({isError})=>isError).tag('seqNo'), 'permit', restOf_extAcl.tag('permitted') )
+	const extAcl_permit	=	parseLine( aclSeqNo.tapOnError(`jager`).tag('seqNo'), 'permit', restOf_extAcl.tag('permitted') )
+
+	const acl_remark			=	parseLine( aclSeqNo.tag('seqNo'), 'remark', rol.tag('remark') ).named('aclRemark')
+	const unknown			 		= parseLine(rol).map(_0).named('unknown').tag('unknown')
+
+
+	const stdAcl_entry = oneOf(
+		stdAclEntry_permit,
+		stdAclEntry_deny,
+		acl_remark,
+		unknown.logResult( (line) => (`${pmodule.name}, [stdAcl_entry]: the line '${line}' does not match any parser in the list`) ),
+	)
+
+	const extAcl_entry = oneOf(
+		statistic_perEntry,
+		extAcl_permit.named('extAcl_permit'), //.debugIf(({target,index,error}) => !error || !target.slice(index).startsWith('hi')),
+		extAcl_deny.named('extAcl_deny'),
+		acl_remark,
+		unknown.logResult( (line) => (`${pmodule.name}, [extAcl_entry]: the line '${line}' does not match any parser in the list`) ),
+	)
+
+
+	// record-level parser 
+	const stdAcl_record = seqOf(
+		lookAhead(strng('ip access-list standard')),
+		parseSection(seqOf(
+			stdAcl_header.tag('aclName'),
+			succeedWith('std').tag('aclType'),
+			many(stdAcl_entry).tagList('aclEntries'),
+		)),
+	).getTaggedR()
+	.map(multiplyBy('aclEntries'))
+	.logEnv( ({
+		section_index_start,
+		section_index_parseduntil, 
+		section_index_termination,
+		section_text_unparsed,
+		section_parser_dataLog,
+	}) => ([
+		// if the section parser has logs, make sure we pull them from the environment, but return empty if not
+		(section_parser_dataLog?.length > 0) ? [
+			`[module:${pmodule.name}, parser:stdAcl_record]: The section parser generated the following logs (note that indices below are relative to the parent index ${section_index_start}:`,
+			section_parser_dataLog.map( (entry) => `  ${entry}` ),
+		] : [],
+		// if the section parser skips text for any reason, report it...
+		(section_text_unparsed?.length > 0) ? [
+			`[module:${pmodule.name}, parser:stdAcl_record]: The section parser did not parse entire section, starting from index ${section_index_termination}, and stopping at ${section_index_parseduntil}.  Skipped text is below:`,
+			`  '${section_text_unparsed}'`,
+		] : [],
+	]))
+
+
+	// record-level parser 
+	const extAcl_record = seqOf(
+		parseSection(seqOf(
+			extAcl_header.tag('aclName'),
+			succeedWith('ext').tag('aclType'),
+			many(extAcl_entry).tagList('aclEntries'),
+		)),
+	).getTaggedR()
+	.map(multiplyBy('aclEntries'))
+	.logEnv( ({
+		section_index_start,
+		section_index_parseduntil, 
+		section_index_termination,
+		section_text_unparsed,
+		section_parser_dataLog,
+	}) => ([
+		// if the section parser has logs, make sure we pull them from the environment, but return empty if not
+		(section_parser_dataLog?.length > 0) ? [
+			`[module:${pmodule.name}, parser:extAcl_record]: The section parser generated the following logs (note that indices below are relative to the parent index ${section_index_start}:`,
+			section_parser_dataLog.map( (entry) => `  ${entry}` ),
+		] : [],
+		// if the section parser skips text for any reason, report it...
+		(section_text_unparsed?.length > 0) ? [
+			`[module:${pmodule.name}, parser:extAcl_record]: The section parser did not parse entire section, starting from index ${section_index_termination}, and stopping at ${section_index_parseduntil}.  Skipped text is below:`,
+			`  '${section_text_unparsed}'`,
+		] : [],
+	]))
+
+
+	const acl_record = oneOf(
+		stdAcl_record,
+		extAcl_record,
+	)
+
+
+
+	return seqOf(
+		gotoSection('ip access-list'),
+		many(acl_record).map(flattenArray)
+	).map(res=>res[1])
+
+}
+
+
+
+// comment this out when using in production
+eos_cfg_acl('test_device_name')
+
+
+// comment this out when using in-browser IDE
+//	export { eos_cfg_acl}
+
